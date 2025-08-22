@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -18,7 +18,7 @@ jobs:
             runner: ubuntu-24.04
           - name: arm64
             target: node18-linux-arm64
-            runner: ubuntu-24.04-arm   
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -33,13 +33,10 @@ jobs:
       - name: Build (${{ matrix.target }})
         run: |
           set -euo pipefail
-          # force clean output dir to avoid mixing artifacts
           rm -rf dist && mkdir -p dist
           npm run build:${{ matrix.name }}
 
           version="$(node -p "require('./package.json').version")"
-          # pkg usually names the binary after the project; normalize and stamp
-          # Try common names, then fall back to "whatever is in dist"
           out="pgkit-migrator-wrapper-${{ matrix.target }}-v${version}"
           if [[ -f dist/pgkit-migrator-wrapper ]]; then
             mv dist/pgkit-migrator-wrapper "dist/${out}"
@@ -64,6 +61,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pick release tag
+        id: tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -75,8 +86,8 @@ jobs:
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/*/*
+          tag_name: ${{ env.TAG }}
+          files: artifacts/*/*
           draft: false
           prerelease: false
         env:
