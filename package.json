@@ -1,0 +1,25 @@
+{
+  "name": "pgkit-migrator-wrapper",
+  "version": "1.0.0",
+  "bin": "pgkit-migrator.js",
+  "scripts": {
+    "build:x64": "pkg . -t node18-linux-x64",
+    "build:arm64": "pkg . -t node18-linux-arm64",
+    "build": "npm i && pkg .",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@pgkit/migrator": "0.5.0"
+  },
+  "pkg": {
+    "scripts": "pgkit-migrator.js",
+    "targets": [
+      "node18-linux-arm64",
+      "node18-linux-x64"
+    ],
+    "outputPath": "dist"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}
