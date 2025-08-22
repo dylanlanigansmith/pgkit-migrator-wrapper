@@ -1,0 +1,81 @@
+name: build-and-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x64
+            target: node18-linux-x64
+          - name: arm64
+            target: node18-linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build (${{ matrix.target }})
+        run: |
+          set -euo pipefail
+          # force clean output dir to avoid mixing artifacts
+          rm -rf dist && mkdir -p dist
+          npm run build:${{ matrix.name }}
+
+          version="$(node -p "require('./package.json').version")"
+          # pkg usually names the binary after the project; normalize and stamp
+          # Try common names, then fall back to "whatever is in dist"
+          out="pgkit-migrator-wrapper-${{ matrix.target }}-v${version}"
+          if [[ -f dist/pgkit-migrator-wrapper ]]; then
+            mv dist/pgkit-migrator-wrapper "dist/${out}"
+          elif [[ -f dist/pgkit-migrator ]]; then
+            mv dist/pgkit-migrator "dist/${out}"
+          else
+            mv dist/* "dist/${out}"
+          fi
+          chmod +x "dist/${out}"
+          echo "ASSET_NAME=${out}" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: dist/${{ env.ASSET_NAME }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -lah ./artifacts/*
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
